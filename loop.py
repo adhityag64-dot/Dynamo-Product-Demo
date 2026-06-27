@@ -16,12 +16,10 @@ from supabase import create_client
 
 from weather import get_weather
 from engine import compute_city_condition, decide_state
-from alerts import send_critical_alert
+from alerts import alert_weather_fail, alert_full_city_pause, alert_override_stuck
 
 load_dotenv()
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
-
-CMO_EMAIL = os.environ.get("CMO_EMAIL", "")
 
 # Per-city condition persisted across scheduler ticks within the same process.
 # On first run every city starts as 'normal'; hysteresis kicks in from tick 2 onward.
@@ -29,18 +27,18 @@ _previous_condition: dict[str, str] = {}
 
 # Alert dedup: tracks which alert keys are currently "active" so we only email
 # on the FIRST occurrence, not every cycle while the condition persists.
-# Keys: "weather_fail:{city}", "full_pause:{city}", "budget:{id}", "override_stuck:{id}"
+# Keys: "weather_fail:{city}", "full_pause:{city}", "override_stuck:{id}"
 _alerted: set[str] = set()
 
 OVERRIDE_STUCK_HOURS = 4   # alert if manual override has been set for longer than this
 
 
-def _maybe_alert(key: str, subject: str, body: str) -> None:
-    """Send alert only if this condition hasn't been alerted yet."""
+def _maybe_alert(key: str, fn, *args) -> None:
+    """Call fn(*args) only if this condition hasn't been alerted yet this process run.
+    Recipient email is resolved inside alerts.py from the DB settings table."""
     if key not in _alerted:
         _alerted.add(key)
-        if CMO_EMAIL:
-            send_critical_alert(subject, body, CMO_EMAIL)
+        fn(*args)
 
 
 def _clear_alert(key: str) -> None:
@@ -48,11 +46,15 @@ def _clear_alert(key: str) -> None:
     _alerted.discard(key)
 
 
-def run_cycle() -> None:
-    now = datetime.now(timezone.utc).isoformat()
+def run_cycle(simulate_weather_fail: set = None) -> None:
+    cycle_start = datetime.now(timezone.utc)
+    now = cycle_start.isoformat()
     print(f"\n{'=' * 70}")
     print(f"DynaMo cycle — {now}")
     print(f"{'=' * 70}")
+    _n_cities = 0
+    _n_decisions = 0
+    _n_transitions = 0
 
     # 1. Fetch line items and city configs
     line_items = supabase.table("line_items").select("*").execute().data
@@ -75,9 +77,13 @@ def run_cycle() -> None:
             print(f"    WARNING: no city_config row — skipping")
             continue
 
-        # One weather call per city
+        # One weather call per city (or inject a failure for simulation)
         lat, lon = items[0]["latitude"], items[0]["longitude"]
-        weather = get_weather(lat, lon)
+        if simulate_weather_fail and city in simulate_weather_fail:
+            weather = {"ok": False}
+            print(f"    [SIMULATE] weather-fail injected for {city}")
+        else:
+            weather = get_weather(lat, lon)
 
         weather_fail_key = f"weather_fail:{city}"
 
@@ -94,21 +100,7 @@ def run_cycle() -> None:
         else:
             condition = "unknown"
             weather_str = "WEATHER API FAILED — fail-safe active"
-            _maybe_alert(
-                weather_fail_key,
-                subject=f"[DynaMo] Weather data lost for {city} — safe ad is running",
-                body=(
-                    f"Hi,\n\n"
-                    f"DynaMo lost its weather data feed for {city} and has automatically "
-                    f"switched all ads in that city to your safe generic creative. "
-                    f"No wrong ad is running — the campaign is protected.\n\n"
-                    f"This usually means a temporary outage with the weather provider. "
-                    f"DynaMo will switch back to weather-targeted ads automatically once "
-                    f"the data comes back.\n\n"
-                    f"Check in when you can. No urgent action is needed.\n\n"
-                    f"— DynaMo"
-                ),
-            )
+            _maybe_alert(weather_fail_key, alert_weather_fail, city)
 
         # Persist live weather reading so the dashboard can read it directly
         supabase.table("city_weather").upsert({
@@ -133,23 +125,13 @@ def run_cycle() -> None:
         weather_failed = not weather["ok"]
 
         if all_paused and not weather_failed:
-            _maybe_alert(
-                full_pause_key,
-                subject=f"[DynaMo] All ads paused in {city} — needs your attention",
-                body=(
-                    f"Hi,\n\n"
-                    f"DynaMo has paused every ad line in {city}. This is not caused by "
-                    f"a weather issue — it looks like it may be related to budget or "
-                    f"another campaign-level constraint.\n\n"
-                    f"No ads are currently running in {city}. Please log in to your "
-                    f"campaign dashboard and check the budget and flight dates for "
-                    f"{city} when you get a chance.\n\n"
-                    f"— DynaMo"
-                ),
-            )
+            _maybe_alert(full_pause_key, alert_full_city_pause, city, items)
         else:
             # At least one ad is active — clear the alert so it re-fires if it returns
             _clear_alert(full_pause_key)
+
+        _n_cities += 1
+        _n_decisions += len(decisions)
 
         # Apply decisions + per-line-item alerts
         for li, desired_state, reason in decisions:
@@ -173,6 +155,7 @@ def run_cycle() -> None:
                     "reason": reason,
                     "timestamp": now,
                 }).execute()
+                _n_transitions += 1
                 change_tag = f"  [{current_state} → {desired_state}]"
             elif reason_changed:
                 # Only the reason string drifted (e.g. temperature ticked 1°C) —
@@ -184,25 +167,6 @@ def run_cycle() -> None:
             else:
                 change_tag = ""
 
-            # ALERT: budget exhausted
-            budget_key = f"budget:{li['id']}"
-            if li["spend_today"] >= li["daily_budget"]:
-                _maybe_alert(
-                    budget_key,
-                    subject=f"[DynaMo] Budget exhausted — {li['city']} / {li['creative_name']}",
-                    body=(
-                        f"Hi,\n\n"
-                        f"The daily budget for {li['creative_name']} in {li['city']} has been "
-                        f"fully spent (₹{li['spend_today']:.0f} of ₹{li['daily_budget']:.0f}).\n\n"
-                        f"DynaMo has paused this line item for the rest of the day. It will "
-                        f"resume automatically tomorrow when spend_today resets to 0.\n\n"
-                        f"If you need it running today, increase the daily budget from the dashboard.\n\n"
-                        f"— DynaMo"
-                    ),
-                )
-            else:
-                _clear_alert(budget_key)
-
             # ALERT: manual override stuck for too long
             override_key = f"override_stuck:{li['id']}"
             if li.get("override") != "none":
@@ -213,19 +177,7 @@ def run_cycle() -> None:
                     age = datetime.now(timezone.utc) - last_updated
                     if age > timedelta(hours=OVERRIDE_STUCK_HOURS):
                         label = "FORCE ON" if li["override"] == "force_active" else "FORCE OFF"
-                        _maybe_alert(
-                            override_key,
-                            subject=f"[DynaMo] Manual override still active — {li['city']} / {li['creative_name']}",
-                            body=(
-                                f"Hi,\n\n"
-                                f"Just a heads-up: {li['creative_name']} in {li['city']} has been "
-                                f"on a manual [{label}] override for more than {OVERRIDE_STUCK_HOURS} hours.\n\n"
-                                f"DynaMo cannot make automatic weather-based decisions for this line item "
-                                f"while the override is active. If this was intentional, no action needed. "
-                                f"If you forgot to clear it, set the override back to Auto from the dashboard.\n\n"
-                                f"— DynaMo"
-                            ),
-                        )
+                        _maybe_alert(override_key, alert_override_stuck, li, label, OVERRIDE_STUCK_HOURS)
                 except (ValueError, TypeError):
                     pass
             else:
@@ -236,12 +188,39 @@ def run_cycle() -> None:
                 f"{desired_state:<6}{change_tag}  {reason}"
             )
 
+    # Log completed cycle
+    finished = datetime.now(timezone.utc).isoformat()
+    supabase.table("cycles").insert({
+        "started_at":  now,
+        "finished_at": finished,
+        "cities":      _n_cities,
+        "decisions":   _n_decisions,
+        "transitions": _n_transitions,
+    }).execute()
+
     print(f"\n{'=' * 70}\n")
 
 
+def _parse_simulate_args() -> set:
+    """Parse --simulate weather-fail:City1,City2 from argv. Returns set of city names."""
+    cities = set()
+    for i, arg in enumerate(sys.argv):
+        if arg == "--simulate" and i + 1 < len(sys.argv):
+            spec = sys.argv[i + 1]
+            if spec.startswith("weather-fail:"):
+                cities = {c.strip() for c in spec[len("weather-fail:"):].split(",")}
+    return cities
+
+
 def main() -> None:
-    if "--once" in sys.argv:
-        run_cycle()
+    simulate_weather_fail = _parse_simulate_args()
+    if simulate_weather_fail:
+        # Clear alerted set so email fires even if a prior run already sent it
+        _alerted.clear()
+        print(f"[SIMULATE] Injecting weather failure for: {', '.join(sorted(simulate_weather_fail))}")
+
+    if "--once" in sys.argv or simulate_weather_fail:
+        run_cycle(simulate_weather_fail=simulate_weather_fail)
         return
 
     from apscheduler.schedulers.blocking import BlockingScheduler

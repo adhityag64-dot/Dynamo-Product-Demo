@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+*.csv
+db_test.py
+load_csv.py
+scratch_test.py

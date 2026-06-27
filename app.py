@@ -18,6 +18,7 @@ from supabase import create_client
 from weather import get_weather
 from engine import compute_city_condition, decide_state
 from loop import run_cycle
+from alerts import alert_override_set, alert_override_cleared
 
 load_dotenv()
 supabase = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
@@ -360,6 +361,12 @@ def set_override(item_id: int, override: str = None, reason: str = ""):
             "timestamp": now,
         }).execute()
 
+    # Recipient resolved from DB inside alerts.py — no email arg needed
+    if override == "none":
+        alert_override_cleared(li)
+    else:
+        alert_override_set(li, override, reason)
+
     return {"ok": True, "state": desired_state, "reason": new_reason}
 
 
@@ -369,16 +376,30 @@ def trigger_cycle():
     return {"ok": True}
 
 
+@app.get("/api/settings")
+def get_settings():
+    row = supabase.table("settings").select("value").eq("key", "alert_email").execute().data
+    return {"alert_email": row[0]["value"] if row else ""}
+
+
+@app.post("/api/settings")
+def save_settings(alert_email: str = ""):
+    supabase.table("settings").upsert({"key": "alert_email", "value": alert_email}).execute()
+    return {"ok": True}
+
+
 @app.get("/api/state")
 def api_state():
     """JSON endpoint for programmatic access."""
     try:
         line_items, transitions, cfg_by_city = fetch_data()
         city_weather = supabase.table("city_weather").select("*").execute().data
+        last_cycle = supabase.table("cycles").select("*").order("finished_at", desc=True).limit(1).execute().data
         return {
             "line_items": line_items,
             "recent_transitions": transitions,
             "city_weather": city_weather,
+            "last_cycle": last_cycle[0] if last_cycle else None,
         }
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Database unreachable: {exc}")

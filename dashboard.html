@@ -308,8 +308,8 @@
   .badge-rainy  { background: var(--rainy); }
   .badge-normal { background: var(--normal); }
   .badge-unknown{ background: var(--unknown); }
-  .weather-stats { display: flex; flex-direction: column; gap: 2px; }
-  .weather-stat  { font-size: 12px; color: var(--text-dim); }
+  .weather-stats { display: flex; flex-direction: column; gap: 4px; }
+  .weather-stat  { font-size: 13px; font-weight: 500; color: var(--text-main); }
 
   /* ── LINE ITEMS TABLE ────────────────────────────────────────── */
   .table-section { margin-bottom: 28px; }
@@ -477,16 +477,19 @@
     Dyna<span>Mo</span>
   </div>
   <div class="navbar-cycle" id="last-cycle-label">Last cycle: —</div>
+  <div class="navbar-cycle" id="next-refresh-label" style="margin-left:10px;color:#64748b;">Next refresh: 5:00</div>
   <div class="navbar-spacer"></div>
   <div class="navbar-actions">
-    <button class="bell-btn" id="bell-btn" onclick="openNotifDrawer()" title="Notifications">
+    <button class="bell-btn" id="settings-btn" onclick="openSettings()" title="Settings" style="margin-right:2px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+    <button class="bell-btn" id="bell-btn" onclick="openNotifDrawer()" title="Notifications &amp; Changes">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
       <span class="bell-badge" id="bell-badge"></span>
-    </button>
-    <button class="btn btn-ghost" id="changes-btn" onclick="openDrawer()">
-      ⚡ Recent Changes <span class="btn-badge" id="changes-badge" style="display:none"></span>
     </button>
     <button class="btn btn-primary" id="run-cycle-btn" onclick="runCycle()">
       <span class="btn-icon">⟳</span>
@@ -629,7 +632,7 @@
     <div class="kpi-card kpi-total">
       <div class="kpi-card-label">Total Line Items</div>
       <div class="kpi-card-value" id="kpi-total">—</div>
-      <div class="kpi-card-sub" id="kpi-total-sub">across 4 cities</div>
+      <div class="kpi-card-sub" id="kpi-total-sub">across 6 cities</div>
     </div>
     <div class="kpi-card kpi-active">
       <div class="kpi-card-label">Active</div>
@@ -697,49 +700,62 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="settings-modal" onclick="closeSettingsModal(event)">
+  <div class="modal">
+    <div class="modal-title">⚙ Alert Settings</div>
+    <div class="modal-sub">Alerts for weather failures, city pauses, and stuck overrides will be sent here.</div>
+    <label class="modal-label" for="settings-email">Alert Email</label>
+    <input type="email" class="modal-input" id="settings-email" placeholder="e.g. cmo@coolsip.com" style="height:40px;resize:none;padding:8px 12px;">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeSettingsModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
-<!-- NOTIFICATIONS DRAWER -->
+<!-- UNIFIED DRAWER -->
 <div class="drawer-overlay" id="notif-overlay" onclick="closeNotifDrawer()"></div>
 <div class="drawer" id="notif-drawer">
   <div class="drawer-header">
     <div class="drawer-title">
-      🔔 Notifications
-      <span class="drawer-count" id="notif-count">0</span>
+      🔔 Activity
+      <span class="drawer-count" id="notif-count"></span>
     </div>
     <button class="drawer-close" onclick="closeNotifDrawer()">✕</button>
   </div>
-  <div class="drawer-body" id="notif-body">
-    <div class="drawer-empty">No alerts — all systems normal.</div>
+  <!-- Tabs -->
+  <div style="display:flex;border-bottom:1px solid var(--border);padding:0 20px;gap:0;">
+    <button id="tab-alerts" onclick="switchTab('alerts')" style="
+      padding:8px 16px;font-size:13px;font-weight:600;border:none;background:none;
+      cursor:pointer;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-1px;
+    ">Alerts <span id="tab-alerts-count" style="font-size:11px;"></span></button>
+    <button id="tab-changes" onclick="switchTab('changes')" style="
+      padding:8px 16px;font-size:13px;font-weight:600;border:none;background:none;
+      cursor:pointer;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-1px;
+    ">Changes <span id="tab-changes-count" style="font-size:11px;"></span></button>
   </div>
-</div>
-
-<!-- RECENT CHANGES DRAWER -->
-<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
-<div class="drawer" id="changes-drawer">
-  <div class="drawer-header">
-    <div class="drawer-title">
-      ⚡ Recent Changes
-      <span class="drawer-count" id="drawer-count">0</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <label style="font-size:12px;color:var(--text-dim);white-space:nowrap;">Show
-        <select id="changes-limit-select" onchange="onChangesLimitChange()" style="
-          margin-left:4px; font-size:12px; padding:3px 6px;
-          border:1px solid var(--border); border-radius:5px;
-          background:#fff; color:var(--text-main); cursor:pointer; outline:none;
-        ">
-          <option value="10">10</option>
-          <option value="20" selected>20</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-        </select>
-      </label>
-      <button class="drawer-close" onclick="closeDrawer()">✕</button>
-    </div>
+  <!-- Alerts pane -->
+  <div class="drawer-body" id="notif-body" style="display:none"></div>
+  <!-- Changes pane -->
+  <div class="drawer-body" id="drawer-body" style="display:none">
+    <div class="drawer-empty">No changes yet.</div>
   </div>
-  <div class="drawer-body" id="drawer-body">
-    <div class="drawer-empty">No changes yet — run a cycle to see transitions.</div>
+  <!-- Changes footer with limit selector -->
+  <div id="changes-footer" style="display:none;padding:10px 20px;border-top:1px solid var(--border);">
+    <label style="font-size:12px;color:var(--text-dim);">Show
+      <select id="changes-limit-select" onchange="onChangesLimitChange()" style="
+        margin-left:4px;font-size:12px;padding:3px 6px;
+        border:1px solid var(--border);border-radius:5px;
+        background:#fff;color:var(--text-main);cursor:pointer;outline:none;">
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+    </label>
+    <span id="drawer-count" style="font-size:12px;color:var(--text-dim);margin-left:12px;"></span>
   </div>
 </div>
 
@@ -747,27 +763,58 @@
 // ── STATE ──────────────────────────────────────────────────────
 let allItems = [], allTransitions = [], cityWeatherMap = {};
 let sortKey = 'city', sortAsc = true;
-let autoRefreshInterval = null, isAutoRefreshOn = false;
+let autoRefreshInterval = null, countdownInterval = null, isAutoRefreshOn = false;
 const AUTO_REFRESH_MS = 5 * 60 * 1000;
+const POLL_INTERVAL_MS = 30 * 1000; // check for new cycle every 30s
+let nextRefreshAt = null;
+let lastKnownCycleTime = null;
 
 function startAutoRefresh() {
   if (isAutoRefreshOn) return;
   isAutoRefreshOn = true;
-  autoRefreshInterval = setInterval(loadData, AUTO_REFRESH_MS);
-  const btn = document.getElementById('auto-refresh-btn');
-  if (btn) btn.classList.add('on');
+  // Poll every 30s — if last_cycle.finished_at changed, load full data
+  autoRefreshInterval = setInterval(async () => {
+    try {
+      const res = await fetch('/api/state');
+      const data = await res.json();
+      const cycleTime = data.last_cycle?.finished_at;
+      if (cycleTime && cycleTime !== lastKnownCycleTime) {
+        // New cycle detected — update everything
+        allItems = data.line_items || [];
+        allTransitions = data.recent_transitions || [];
+        buildWeatherMap(data.city_weather || []);
+        if (data.last_cycle) updateLastCycleFromDB(data.last_cycle);
+        render();
+        showToast('Data updated — new cycle completed');
+      }
+    } catch(e) { /* silent — toast only on full loadData failures */ }
+  }, POLL_INTERVAL_MS);
+  _startCountdown();
+}
+
+function _startCountdown() {
+  clearInterval(countdownInterval);
+  countdownInterval = setInterval(() => {
+    const el = document.getElementById('next-refresh-label');
+    if (!el || !nextRefreshAt) return;
+    const secs = Math.max(0, Math.round((nextRefreshAt - Date.now()) / 1000));
+    const m = String(Math.floor(secs / 60)).padStart(1,'0');
+    const s = String(secs % 60).padStart(2,'0');
+    el.textContent = `Next refresh: ${m}:${s}`;
+  }, 1000);
 }
 
 function toggleAutoRefresh() {
-  const btn = document.getElementById('auto-refresh-btn');
   if (isAutoRefreshOn) {
     clearInterval(autoRefreshInterval);
+    clearInterval(countdownInterval);
     isAutoRefreshOn = false;
-    if (btn) btn.classList.remove('on');
+    const el = document.getElementById('next-refresh-label');
+    if (el) el.textContent = 'Auto-refresh off';
     showToast('Auto-refresh paused');
   } else {
     startAutoRefresh();
-    showToast('Auto-refresh on — polls every 5 min');
+    showToast('Auto-refresh on');
   }
 }
 
@@ -805,6 +852,7 @@ async function loadData() {
     const data = await res.json();
     allItems = data.line_items || [];
     allTransitions = data.recent_transitions || [];
+    if (data.last_cycle) updateLastCycleFromDB(data.last_cycle);
     buildWeatherMap(data.city_weather || []);
     render();
   } catch(e) { console.error('loadData failed:', e.message, e.stack); showToast('Failed to load data: ' + e.message); }
@@ -838,16 +886,19 @@ function render() {
   renderFeed();
   applyFilters();
   updateChangesBadge();
-  if (drawerOpen) renderDrawer();
+  if (drawerOpen) { if (activeTab === 'changes') renderDrawer(); else renderNotifDrawer(); }
 }
 
-function updateLastCycle() {
-  const times = allTransitions.map(t => t.timestamp).filter(Boolean).sort().reverse();
+function updateLastCycle() {} // now driven by updateLastCycleFromDB
+
+function updateLastCycleFromDB(cycle) {
   const el = document.getElementById('last-cycle-label');
-  if (el && times.length) {
-    const d = new Date(times[0]);
-    el.textContent = 'Last cycle: ' + d.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  }
+  if (!el || !cycle) return;
+  const d = new Date(cycle.finished_at);
+  const time = d.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  el.textContent = `Last cycle: ${time} · ${cycle.cities} cities · ${cycle.decisions} decisions · ${cycle.transitions} changes`;
+  lastKnownCycleTime = cycle.finished_at;
+  nextRefreshAt = d.getTime() + AUTO_REFRESH_MS;
 }
 
 function renderKPIs(items) {
@@ -860,7 +911,8 @@ function renderKPIs(items) {
   setText('kpi-active',   active);
   setText('kpi-paused',   paused);
   setText('kpi-override', override);
-  setText('kpi-total-sub', items.length === allItems.length ? 'across 4 cities' : `of ${allItems.length} total`);
+  const totalCities = new Set(allItems.map(i => i.city)).size;
+  setText('kpi-total-sub', items.length === allItems.length ? `across ${totalCities} cities` : `of ${allItems.length} total`);
 }
 
 let currentAlerts = [];
@@ -901,8 +953,8 @@ function renderAlerts() {
     badge.style.display = 'none';
   }
 
-  // Re-render drawer if open
-  if (notifDrawerOpen) renderNotifDrawer();
+  document.getElementById('tab-alerts-count').textContent = currentAlerts.length ? `(${currentAlerts.length})` : '';
+  if (notifDrawerOpen && activeTab === 'alerts') renderNotifDrawer();
 }
 
 function renderNotifDrawer() {
@@ -937,8 +989,8 @@ function renderWeather() {
       <div class="weather-city">${city}</div>
       <div class="weather-badge ${condBadgeClass(cond)}">${cond.toUpperCase()}</div>
       <div class="weather-stats">
-        ${w.temperature!=null?`<div class="weather-stat">🌡 ${w.temperature.toFixed(1)}°C actual</div>`:''}
-        ${w.feels_like!=null?`<div class="weather-stat">🤔 ${w.feels_like.toFixed(1)}°C feels like</div>`:''}
+        ${w.temperature!=null?`<div class="weather-stat" style="${cond==='hot'?'font-weight:700;color:#ea580c;font-size:14px;':''}">🌡 ${w.temperature.toFixed(1)}°C actual</div>`:''}
+        ${w.feels_like!=null?`<div class="weather-stat" style="${cond==='hot'?'font-weight:700;color:#ea580c;font-size:14px;':''}">🤔 ${w.feels_like.toFixed(1)}°C feels like</div>`:''}
         ${w.precip!=null?`<div class="weather-stat">🌧 ${w.precip.toFixed(1)} mm precip</div>`:''}
         ${w.temperature==null&&w.feels_like==null?'<div class="weather-stat" style="color:#ef4444">No weather data</div>':''}
       </div>
@@ -956,7 +1008,7 @@ function renderTable() {
       ? '<span class="override-badge badge-manual-on">FORCE ON</span>'
       : li.override==='force_paused'
       ? '<span class="override-badge badge-manual-off">FORCE OFF</span>' : '';
-    return `<tr class="${rowClass}" data-city="${li.city}" data-state="${li.state}" data-condition="${cond}" data-override="${li.override}">
+    return `<tr class="${rowClass}" data-id="${li.id}" data-city="${li.city}" data-state="${li.state}" data-condition="${cond}" data-override="${li.override}">
       <td class="td-city"><span class="city-dot dot-${li.city.toLowerCase()}" style="margin-right:4px;"></span>${li.city}</td>
       <td><div class="td-creative">${li.creative_name} ${overrideBadge}</div></td>
       <td><span class="td-state-pill ${li.state==='active'?'pill-active':'pill-paused'}">
@@ -1067,9 +1119,11 @@ function applyFilters() {
   // Update dropdown button state (highlight if non-default)
   updateDdButtonState(cities, state, conds, over);
 
-  // Recompute KPIs
-  const rows = [...document.querySelectorAll('#line-items-body tr')];
-  const visItems = allItems.filter((_,i) => rows[i] && !rows[i].classList.contains('row-hidden'));
+  // Recompute KPIs from visible row IDs, not positional index
+  const visibleIds = new Set(
+    [...document.querySelectorAll('#line-items-body tr:not(.row-hidden)')].map(r => parseInt(r.dataset.id))
+  );
+  const visItems = allItems.filter(li => visibleIds.has(li.id));
   renderKPIs(visItems.length ? visItems : allItems);
 }
 
@@ -1161,6 +1215,32 @@ function setOverride(id, value, creativeName, city) {
   setTimeout(() => document.getElementById('modal-reason').focus(), 80);
 }
 
+async function openSettings() {
+  try {
+    const r = await fetch('/api/settings');
+    const d = await r.json();
+    document.getElementById('settings-email').value = d.alert_email || '';
+  } catch(_) {}
+  document.getElementById('settings-modal').classList.add('open');
+  document.getElementById('settings-email').focus();
+}
+
+function closeSettingsModal(e) {
+  if (e && e.target !== document.getElementById('settings-modal')) return;
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
+async function saveSettings() {
+  const email = document.getElementById('settings-email').value.trim();
+  try {
+    await fetch(`/api/settings?alert_email=${encodeURIComponent(email)}`, { method: 'POST' });
+    document.getElementById('settings-modal').classList.remove('open');
+    showToast('Alert email saved ✓');
+  } catch(_) {
+    showToast('Failed to save settings', true);
+  }
+}
+
 function closeModal(e) {
   if (e && e.target !== document.getElementById('override-modal')) return;
   document.getElementById('override-modal').classList.remove('open');
@@ -1204,15 +1284,46 @@ async function runCycle() {
 }
 
 
-// ── NOTIFICATIONS DRAWER ───────────────────────────────────────
+// ── UNIFIED DRAWER ─────────────────────────────────────────────
 let notifDrawerOpen = false;
+let drawerOpen = false; // alias for render() compat
+let activeTab = 'alerts';
+let changesLimit = 20;
 
-function openNotifDrawer() {
+function switchTab(tab) {
+  activeTab = tab;
+  const alertsPane   = document.getElementById('notif-body');
+  const changesPane  = document.getElementById('drawer-body');
+  const changesFooter = document.getElementById('changes-footer');
+  const tabAlerts  = document.getElementById('tab-alerts');
+  const tabChanges = document.getElementById('tab-changes');
+  const active = 'color:var(--text-main);border-bottom-color:#6366f1;';
+  const inactive = 'color:var(--text-dim);border-bottom-color:transparent;';
+
+  if (tab === 'alerts') {
+    alertsPane.style.display = '';
+    changesPane.style.display = 'none';
+    changesFooter.style.display = 'none';
+    tabAlerts.style.cssText  += active;
+    tabChanges.style.cssText += inactive;
+    renderNotifDrawer();
+  } else {
+    alertsPane.style.display = 'none';
+    changesPane.style.display = '';
+    changesFooter.style.display = '';
+    tabAlerts.style.cssText  += inactive;
+    tabChanges.style.cssText += active;
+    renderDrawer();
+  }
+}
+
+function openNotifDrawer(startTab) {
   document.getElementById('notif-drawer').classList.add('open');
   document.getElementById('notif-overlay').classList.add('open');
   notifDrawerOpen = true;
-  renderNotifDrawer();
-  // clear badge glow while open
+  drawerOpen = true;
+  switchTab(startTab || activeTab);
+  // clear badge while open
   document.getElementById('bell-btn').classList.remove('has-alerts');
   document.getElementById('bell-badge').style.display = 'none';
 }
@@ -1221,32 +1332,16 @@ function closeNotifDrawer() {
   document.getElementById('notif-drawer').classList.remove('open');
   document.getElementById('notif-overlay').classList.remove('open');
   notifDrawerOpen = false;
-  // restore badge if alerts still exist
+  drawerOpen = false;
   if (currentAlerts.length > 0) {
     document.getElementById('bell-btn').classList.add('has-alerts');
     document.getElementById('bell-badge').style.display = 'block';
   }
 }
 
-// ── RECENT CHANGES DRAWER ──────────────────────────────────────
-let drawerOpen = false;
-let changesLimit = 20;
-
-function openDrawer() {
-  document.getElementById('changes-drawer').classList.add('open');
-  document.getElementById('drawer-overlay').classList.add('open');
-  drawerOpen = true;
-  renderDrawer();
-  // clear badge when opened
-  const badge = document.getElementById('changes-badge');
-  badge.style.display = 'none';
-}
-
-function closeDrawer() {
-  document.getElementById('changes-drawer').classList.remove('open');
-  document.getElementById('drawer-overlay').classList.remove('open');
-  drawerOpen = false;
-}
+// Keep openDrawer alias so render() call still works
+function openDrawer() { openNotifDrawer('changes'); }
+function closeDrawer() { closeNotifDrawer(); }
 
 function onChangesLimitChange() {
   changesLimit = parseInt(document.getElementById('changes-limit-select').value, 10);
@@ -1257,10 +1352,11 @@ function renderDrawer() {
   const cityById = {}, nameById = {};
   for (const li of allItems) { cityById[li.id] = li.city; nameById[li.id] = li.creative_name; }
 
-  const body = document.getElementById('drawer-body');
+  const body  = document.getElementById('drawer-body');
   const count = document.getElementById('drawer-count');
   const visible = allTransitions.slice(0, changesLimit);
   count.textContent = `${visible.length} of ${allTransitions.length}`;
+  document.getElementById('tab-changes-count').textContent = allTransitions.length ? `(${allTransitions.length})` : '';
 
   if (!allTransitions.length) {
     body.innerHTML = '<div class="drawer-empty">No transitions yet — run a cycle to see changes.</div>';
@@ -1274,10 +1370,9 @@ function renderDrawer() {
     const ts = t.timestamp
       ? new Date(t.timestamp).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', second:'2-digit' })
       : '—';
-    const dotClass = `dot-${city.toLowerCase()}`;
     return `<div class="change-card">
       <div class="change-card-top">
-        <span class="city-dot ${dotClass}"></span>
+        <span class="city-dot dot-${city.toLowerCase()}"></span>
         <span style="font-size:13px;font-weight:600;color:var(--text-main)">${city}</span>
         <span style="font-size:12px;color:var(--text-dim)">/ ${name}</span>
         <span class="change-pill ${isUp ? 'change-up' : 'change-down'}" style="margin-left:auto">
@@ -1291,15 +1386,7 @@ function renderDrawer() {
 }
 
 function updateChangesBadge() {
-  if (drawerOpen) return;
-  const badge = document.getElementById('changes-badge');
-  const total = allTransitions.length;
-  if (total > 0) {
-    badge.textContent = total > 99 ? '99+' : total;
-    badge.style.display = 'inline-block';
-  } else {
-    badge.style.display = 'none';
-  }
+  // Badge is on the bell now — handled by renderAlerts
 }
 
 // ── FEED TOGGLE ────────────────────────────────────────────────
