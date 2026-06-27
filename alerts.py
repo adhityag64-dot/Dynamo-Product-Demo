@@ -1,27 +1,22 @@
 """
-alerts.py — Email alerting for DynaMo critical events via Gmail SMTP.
+alerts.py — Email alerting for DynaMo via Resend HTTP API.
 
-One named function per alert type so each email has specific, actionable content.
-Low-level send_critical_alert() is the only function that touches the network.
+Uses Resend (HTTP) instead of Gmail SMTP — works on Railway and all cloud hosts.
 
-SMTP credentials stay in .env:
-    GMAIL_USER=you@gmail.com
-    GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
-
-Recipient email is read live from the Supabase `settings` table (key=alert_email),
-set via the Settings gear in the dashboard. Falls back to GMAIL_USER if not configured.
+Env vars:
+    RESEND_API_KEY=re_...
+    CMO_EMAIL=fallback@example.com   (used if settings table has no email)
 """
 
 import logging
 import os
-import smtplib
-from email.message import EmailMessage
+import httpx
 
 logger = logging.getLogger(__name__)
 
 
 def _get_recipient() -> str:
-    """Read alert_email from DB settings. Falls back to GMAIL_USER env var."""
+    """Read alert_email from DB settings. Falls back to CMO_EMAIL env var."""
     try:
         from supabase import create_client
         sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_KEY"])
@@ -30,32 +25,33 @@ def _get_recipient() -> str:
             return row[0]["value"]
     except Exception:
         pass
-    return os.environ.get("GMAIL_USER", "")
+    return os.environ.get("CMO_EMAIL", "")
 
 
 def send_critical_alert(subject: str, body: str, to_email: str = "") -> None:
-    gmail_user = os.environ.get("GMAIL_USER", "")
-    gmail_pass = os.environ.get("GMAIL_APP_PASSWORD", "")
-
-    if not gmail_user or not gmail_pass:
-        logger.warning("GMAIL_USER / GMAIL_APP_PASSWORD not set — skipping email alert")
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    if not api_key:
+        logger.warning("RESEND_API_KEY not set — skipping alert")
         return
 
     recipient = to_email or _get_recipient()
     if not recipient:
-        logger.warning("No alert recipient configured — skipping email alert")
+        logger.warning("No alert recipient configured — skipping alert")
         return
 
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"]    = f"DynaMo <{gmail_user}>"
-    msg["To"]      = recipient
-    msg.set_content(body)
-
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as smtp:
-            smtp.login(gmail_user, gmail_pass)
-            smtp.send_message(msg)
+        resp = httpx.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "from": "DynaMo <onboarding@resend.dev>",
+                "to": [recipient],
+                "subject": subject,
+                "text": body,
+            },
+            timeout=10.0,
+        )
+        resp.raise_for_status()
         logger.info("Alert sent to %s: %s", recipient, subject)
     except Exception as exc:
         logger.error("Failed to send alert email (%s): %s", subject, exc)
