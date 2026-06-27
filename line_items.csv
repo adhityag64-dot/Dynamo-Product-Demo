@@ -1,0 +1,13 @@
+line_item_id,creative_id,creative_name,city,latitude,longitude,state,bid_inr,daily_budget_inr
+LI-001,CR-HOT,Beat the heat,Mumbai,19.076,72.8777,paused,12.5,5000
+LI-002,CR-RAIN,Rainy day pick-me-up,Mumbai,19.076,72.8777,paused,11,5000
+LI-003,CR-NORM,Refresh anytime,Mumbai,19.076,72.8777,active,9,5000
+LI-004,CR-HOT,Beat the heat,Delhi,28.6139,77.209,active,13,6000
+LI-005,CR-RAIN,Rainy day pick-me-up,Delhi,28.6139,77.209,paused,11.5,6000
+LI-006,CR-NORM,Refresh anytime,Delhi,28.6139,77.209,paused,9.5,6000
+LI-007,CR-HOT,Beat the heat,Bangalore,12.9716,77.5946,paused,12,4500
+LI-008,CR-RAIN,Rainy day pick-me-up,Bangalore,12.9716,77.5946,paused,11,4500
+LI-009,CR-NORM,Refresh anytime,Bangalore,12.9716,77.5946,active,9,4500
+LI-010,CR-HOT,Beat the heat,Chennai,13.0827,80.2707,active,12.5,5500
+LI-011,CR-RAIN,Rainy day pick-me-up,Chennai,13.0827,80.2707,paused,11,5500
+LI-012,CR-NORM,Refresh anytime,Chennai,13.0827,80.2707,paused,9,5500

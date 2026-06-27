@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DynaMo — Ad Decision Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #f5f6fa;
+    --card:      #ffffff;
+    --border:    #e5e7eb;
+    --text-main: #111827;
+    --text-dim:  #6b7280;
+    --text-xs:   #9ca3af;
+    --active-bg:     #f0fdf4;
+    --active-border: #16a34a;
+    --paused-border: #d1d5db;
+    --override-bg:   #fffbeb;
+    --override-border:#d97706;
+    --hot:    #ea580c;
+    --rainy:  #2563eb;
+    --normal: #059669;
+    --unknown:#6b7280;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,.07), 0 2px 4px -2px rgba(0,0,0,.05);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text-main);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  /* ── NAVBAR ──────────────────────────────────────────────────── */
+  .navbar {
+    display: flex; align-items: center; gap: 12px;
+    background: #fff; border-bottom: 1px solid var(--border);
+    padding: 0 20px; height: 52px;
+    position: sticky; top: 0; z-index: 200;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  .navbar-logo {
+    font-weight: 700; font-size: 16px; color: var(--text-main);
+    letter-spacing: -.3px; display: flex; align-items: center; gap: 6px;
+  }
+  .navbar-logo span { color: #2563eb; }
+  .navbar-cycle {
+    font-size: 11px; color: var(--text-dim);
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 20px; white-space: nowrap;
+  }
+  .navbar-spacer { flex: 1; }
+  .navbar-actions { display: flex; align-items: center; gap: 8px; }
+
+  /* ── MODAL ───────────────────────────────────────────────────── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.35); z-index: 500;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 12px; padding: 24px 28px;
+    width: 420px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,.18);
+  }
+  .modal-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .modal-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 16px; }
+  .modal-label { font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; display: block; }
+  .modal-input {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 13px; font-family: inherit;
+    outline: none; resize: vertical; min-height: 72px;
+    transition: border-color .12s;
+  }
+  .modal-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px #bfdbfe55; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .modal-badge {
+    display: inline-block; font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 4px; margin-left: 6px;
+  }
+  .modal-badge.on  { background: #dcfce7; color: #15803d; }
+  .modal-badge.off { background: #fee2e2; color: #b91c1c; }
+  .modal-badge.auto { background: #f3f4f6; color: #6b7280; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 12px; border-radius: 6px; font-size: 13px;
+    font-weight: 500; cursor: pointer; border: 1px solid transparent;
+    transition: background .12s, opacity .12s; white-space: nowrap;
+  }
+  .btn-primary { background: #2563eb; color: #fff; border-color: #1d4ed8; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--text-dim); border-color: var(--border); }
+  .btn-ghost:hover { background: var(--bg); }
+  .btn-ghost.on { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+  .spinner { display: none; width: 12px; height: 12px; border: 2px solid rgba(255,255,255,.3);
+    border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; }
+  .btn.loading .spinner { display: block; }
+  .btn.loading .btn-icon { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── FILTER BAR ──────────────────────────────────────────────── */
+  .filter-bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    background: #fff; border-bottom: 1px solid var(--border);
+    padding: 8px 20px;
+    position: sticky; top: 52px; z-index: 190;
+    box-shadow: 0 1px 0 var(--border);
+  }
+  .filter-bar-label {
+    font-size: 11px; font-weight: 600; color: var(--text-xs);
+    text-transform: uppercase; letter-spacing: .06em;
+    white-space: nowrap; margin-right: 2px;
+  }
+  .filter-sep {
+    width: 1px; height: 24px; background: var(--border); margin: 0 4px;
+    flex-shrink: 0;
+  }
+
+  /* Dropdown trigger button */
+  .dd-wrap { position: relative; }
+  .dd-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border: 1px solid var(--border);
+    border-radius: 6px; background: #fff; cursor: pointer;
+    font-size: 12px; font-weight: 500; color: var(--text-main);
+    white-space: nowrap; transition: border-color .12s, box-shadow .12s;
+    user-select: none;
+  }
+  .dd-btn:hover { border-color: #93c5fd; }
+  .dd-btn.active { border-color: #2563eb; background: #eff6ff; color: #2563eb; }
+  .dd-btn .dd-caret { font-size: 9px; color: var(--text-xs); transition: transform .15s; }
+  .dd-btn.open .dd-caret { transform: rotate(180deg); }
+  .dd-btn .dd-tag {
+    display: inline-block; background: #2563eb; color: #fff;
+    border-radius: 10px; font-size: 10px; font-weight: 700;
+    padding: 0 5px; min-width: 16px; text-align: center; line-height: 16px;
+  }
+
+  /* Dropdown panel */
+  .dd-panel {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0;
+    min-width: 200px; background: #fff; border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: var(--shadow-md); z-index: 300; padding: 6px 0;
+  }
+  .dd-panel.open { display: block; }
+  .dd-panel-title {
+    font-size: 10px; font-weight: 700; color: var(--text-xs);
+    text-transform: uppercase; letter-spacing: .06em;
+    padding: 6px 12px 4px; border-bottom: 1px solid #f3f4f6; margin-bottom: 4px;
+  }
+  .dd-option {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; cursor: pointer; font-size: 13px; color: var(--text-main);
+    transition: background .08s;
+  }
+  .dd-option:hover { background: #f9fafb; }
+  .dd-option input { accent-color: #2563eb; cursor: pointer; flex-shrink: 0; }
+  .dd-option-count {
+    margin-left: auto; font-size: 11px; color: var(--text-xs);
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 0 5px; border-radius: 10px; min-width: 20px; text-align: center;
+  }
+
+  /* City dots */
+  .city-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+  .dot-bangalore  { background: #7c3aed; }
+  .dot-chennai    { background: #0891b2; }
+  .dot-delhi      { background: #dc2626; }
+  .dot-mumbai     { background: #d97706; }
+  .dot-hyderabad  { background: #059669; }
+  .dot-kolkata    { background: #be185d; }
+
+  /* Condition chips inside dropdown */
+  .cond-chip {
+    font-size: 10px; font-weight: 700; letter-spacing: .04em;
+    padding: 1px 6px; border-radius: 10px; color: #fff;
+  }
+  .chip-hot    { background: var(--hot); }
+  .chip-rainy  { background: var(--rainy); }
+  .chip-normal { background: var(--normal); }
+  .chip-unknown{ background: var(--unknown); }
+
+  /* Active filters summary chips */
+  .active-filter-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: #eff6ff; border: 1px solid #bfdbfe; color: #2563eb;
+    border-radius: 20px; font-size: 11px; font-weight: 500;
+    padding: 2px 8px; white-space: nowrap;
+  }
+  .active-filter-chip .chip-x {
+    cursor: pointer; font-size: 12px; line-height: 1;
+    margin-left: 2px; opacity: .6;
+  }
+  .active-filter-chip .chip-x:hover { opacity: 1; }
+
+  .reset-btn {
+    font-size: 12px; color: #6b7280; cursor: pointer;
+    padding: 4px 8px; border-radius: 5px; border: none; background: none;
+    transition: color .1s, background .1s;
+  }
+  .reset-btn:hover { color: #2563eb; background: #eff6ff; }
+
+  /* ── MAIN CONTENT ────────────────────────────────────────────── */
+  .main { padding: 20px 24px; max-width: 1400px; }
+
+  /* ── KPI CARDS ───────────────────────────────────────────────── */
+  .kpi-row {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; margin-bottom: 20px;
+  }
+  .kpi-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow);
+  }
+  .kpi-card-label {
+    font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--text-xs); margin-bottom: 6px;
+  }
+  .kpi-card-value { font-size: 28px; font-weight: 700; line-height: 1; }
+  .kpi-card-sub   { font-size: 11px; color: var(--text-xs); margin-top: 4px; }
+  .kpi-total   .kpi-card-value { color: var(--text-main); }
+  .kpi-active  .kpi-card-value { color: #16a34a; }
+  .kpi-paused  .kpi-card-value { color: var(--text-dim); }
+  .kpi-override .kpi-card-value { color: #d97706; }
+
+  /* ── SECTION HEADER ──────────────────────────────────────────── */
+  .section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .section-title {
+    font-size: 12px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-dim);
+  }
+  .section-badge {
+    font-size: 11px; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text-xs); padding: 1px 6px; border-radius: 10px;
+  }
+
+  /* ── ALERTS (notifications drawer) ──────────────────────────── */
+  .notif-card {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 11px 14px; border-radius: 8px; border: 1px solid #fde68a;
+    background: #fffbeb; margin-bottom: 8px;
+  }
+  .notif-card.critical { border-color: #fca5a5; background: #fff1f2; }
+  .notif-card.ok       { border-color: #bbf7d0; background: #f0fdf4; }
+  .notif-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+  .notif-body { flex: 1; }
+  .notif-title { font-size: 13px; font-weight: 600; color: #92400e; }
+  .notif-card.critical .notif-title { color: #991b1b; }
+  .notif-card.ok       .notif-title { color: #15803d; }
+  .notif-sub { font-size: 11px; color: #b45309; margin-top: 2px; }
+  .notif-card.critical .notif-sub { color: #dc2626; }
+  .notif-card.ok       .notif-sub  { color: #16a34a; }
+
+  /* Bell button */
+  .bell-btn {
+    position: relative; width: 34px; height: 34px; border-radius: 7px;
+    border: 1px solid var(--border); background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background .12s, border-color .12s;
+    color: var(--text-dim); flex-shrink: 0;
+  }
+  .bell-btn:hover { background: var(--bg); border-color: #93c5fd; }
+  .bell-btn.has-alerts { border-color: #fde68a; background: #fffbeb; color: #d97706; }
+  .bell-btn.has-alerts:hover { background: #fef3c7; }
+  .bell-badge {
+    position: absolute; top: -5px; right: -5px;
+    background: #ef4444; color: #fff; border-radius: 10px;
+    font-size: 9px; font-weight: 700; padding: 1px 4px;
+    min-width: 16px; text-align: center; line-height: 14px;
+    border: 2px solid #fff; display: none;
+  }
+
+  /* ── WEATHER STRIP ───────────────────────────────────────────── */
+  .weather-strip {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 10px; margin-bottom: 24px;
+  }
+  .weather-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px; box-shadow: var(--shadow);
+    cursor: pointer; transition: border-color .15s, box-shadow .15s;
+    position: relative; overflow: hidden;
+  }
+  .weather-card::before {
+    content: ''; position: absolute; top: 0; left: 0;
+    width: 3px; height: 100%;
+  }
+  .weather-card[data-city="Bangalore"]::before { background: #7c3aed; }
+  .weather-card[data-city="Chennai"]::before   { background: #0891b2; }
+  .weather-card[data-city="Delhi"]::before     { background: #dc2626; }
+  .weather-card[data-city="Mumbai"]::before    { background: #d97706; }
+  .weather-card:hover { border-color: #93c5fd; box-shadow: var(--shadow-md); }
+  .weather-card.filter-active { border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }
+  .weather-city { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .weather-badge {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    letter-spacing: .05em; padding: 2px 7px; border-radius: 20px;
+    color: #fff; margin-bottom: 8px;
+  }
+  .badge-hot    { background: var(--hot); }
+  .badge-rainy  { background: var(--rainy); }
+  .badge-normal { background: var(--normal); }
+  .badge-unknown{ background: var(--unknown); }
+  .weather-stats { display: flex; flex-direction: column; gap: 2px; }
+  .weather-stat  { font-size: 12px; color: var(--text-dim); }
+
+  /* ── LINE ITEMS TABLE ────────────────────────────────────────── */
+  .table-section { margin-bottom: 28px; }
+  .data-table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden; box-shadow: var(--shadow);
+  }
+  .data-table thead th {
+    background: #f9fafb; border-bottom: 1px solid var(--border);
+    padding: 9px 12px; text-align: left;
+    font-size: 11px; font-weight: 600; color: var(--text-xs);
+    text-transform: uppercase; letter-spacing: .05em;
+    cursor: pointer; white-space: nowrap; user-select: none;
+  }
+  .data-table thead th:hover { color: var(--text-dim); }
+  .data-table thead th .sort-icon { opacity: .4; margin-left: 3px; font-size: 10px; }
+  .data-table thead th.sorted .sort-icon { opacity: 1; }
+  .data-table tbody tr { border-left: 3px solid transparent; transition: background .1s; }
+  .data-table tbody tr:not(:last-child) td { border-bottom: 1px solid #f3f4f6; }
+  .data-table tbody tr.row-active   { border-left-color: var(--active-border);   background: var(--active-bg); }
+  .data-table tbody tr.row-paused   { border-left-color: var(--paused-border); }
+  .data-table tbody tr.row-override { border-left-color: var(--override-border); background: var(--override-bg); }
+  .data-table tbody tr:hover { background: #f9fafb !important; }
+  .data-table tbody tr.row-active:hover   { background: #dcfce7 !important; }
+  .data-table tbody tr.row-override:hover { background: #fef3c7 !important; }
+  .data-table td { padding: 9px 12px; vertical-align: middle; }
+
+  .td-city { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+  .td-creative {
+    font-size: 13px; font-weight: 500; display: flex;
+    align-items: center; gap: 6px; white-space: nowrap;
+  }
+  .td-state-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; padding: 3px 8px;
+    border-radius: 20px; white-space: nowrap;
+  }
+  .pill-active { background: #dcfce7; color: #15803d; }
+  .pill-paused { background: #f3f4f6; color: #6b7280; }
+  .pill-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .pill-active .pill-dot { background: #16a34a; }
+  .pill-paused .pill-dot { background: #9ca3af; }
+  .condition-chip {
+    font-size: 10px; font-weight: 700; letter-spacing: .04em;
+    padding: 2px 6px; border-radius: 10px; color: #fff; white-space: nowrap;
+  }
+  .td-reason { font-size: 12px; color: var(--text-dim); max-width: 240px; }
+  .override-badge {
+    font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+    white-space: nowrap; text-transform: uppercase; letter-spacing: .04em;
+  }
+  .badge-manual-on  { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+  .badge-manual-off { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+  .override-select {
+    font-size: 12px; padding: 4px 7px; border: 1px solid var(--border);
+    border-radius: 5px; background: #fff; color: var(--text-main);
+    cursor: pointer; outline: none; transition: border-color .12s; max-width: 120px;
+  }
+  .override-select:hover { border-color: #93c5fd; }
+  .override-select:focus { border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }
+  .row-hidden { display: none !important; }
+
+  /* ── TRANSITIONS FEED ────────────────────────────────────────── */
+  .feed-table {
+    width: 100%; border-collapse: separate; border-spacing: 0;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden; box-shadow: var(--shadow);
+  }
+  .feed-table thead th {
+    background: #f9fafb; border-bottom: 1px solid var(--border);
+    padding: 8px 12px; text-align: left; font-size: 11px;
+    font-weight: 600; color: var(--text-xs); text-transform: uppercase; letter-spacing: .05em;
+  }
+  .feed-table tbody tr:not(:last-child) td { border-bottom: 1px solid #f3f4f6; }
+  .feed-table td { padding: 8px 12px; vertical-align: middle; font-size: 12px; }
+  .feed-ts { color: var(--text-xs); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .feed-city { color: var(--text-dim); white-space: nowrap; }
+  .change-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; padding: 2px 7px;
+    border-radius: 20px; white-space: nowrap;
+  }
+  .change-up   { background: #dcfce7; color: #15803d; }
+  .change-down { background: #fee2e2; color: #b91c1c; }
+  .feed-reason { color: var(--text-dim); }
+  .feed-row-hidden { display: none; }
+
+  .empty-state { text-align: center; padding: 32px; color: var(--text-xs); font-size: 13px; }
+
+  /* ── RECENT CHANGES DRAWER ───────────────────────────────────── */
+  .drawer-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.35);
+    z-index: 400; backdrop-filter: blur(2px);
+  }
+  .drawer-overlay.open { display: block; }
+  .drawer {
+    position: fixed; top: 0; right: -480px; width: 480px; height: 100vh;
+    background: #fff; box-shadow: -4px 0 24px rgba(0,0,0,.12);
+    z-index: 401; display: flex; flex-direction: column;
+    transition: right .25s cubic-bezier(.4,0,.2,1);
+  }
+  .drawer.open { right: 0; }
+  .drawer-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .drawer-title {
+    font-size: 15px; font-weight: 700; color: var(--text-main);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .drawer-count {
+    font-size: 11px; font-weight: 600; background: #eff6ff; color: #2563eb;
+    border: 1px solid #bfdbfe; border-radius: 20px; padding: 1px 7px;
+  }
+  .drawer-close {
+    width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border);
+    background: none; cursor: pointer; font-size: 16px; color: var(--text-dim);
+    display: flex; align-items: center; justify-content: center;
+    transition: background .1s, color .1s;
+  }
+  .drawer-close:hover { background: #f3f4f6; color: var(--text-main); }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 12px 20px; }
+  .drawer-empty { text-align: center; padding: 48px 20px; color: var(--text-xs); font-size: 13px; }
+
+  .change-card {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border);
+    margin-bottom: 8px; background: #fff; transition: border-color .1s;
+  }
+  .change-card:hover { border-color: #93c5fd; }
+  .change-card-top { display: flex; align-items: center; gap: 8px; }
+  .change-card-meta { font-size: 11px; color: var(--text-xs); margin-top: 2px; }
+  .change-card-reason { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+
+  /* badge on navbar button */
+  .btn-badge {
+    display: inline-block; background: #ef4444; color: #fff;
+    border-radius: 10px; font-size: 10px; font-weight: 700;
+    padding: 0 5px; min-width: 16px; text-align: center; line-height: 16px;
+    margin-left: 2px;
+  }
+
+  /* ── TOAST ───────────────────────────────────────────────────── */
+  .toast {
+    position: fixed; bottom: 20px; right: 20px; background: #111827; color: #fff;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px; box-shadow: var(--shadow-md);
+    z-index: 9999; opacity: 0; transform: translateY(8px);
+    transition: opacity .2s, transform .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <div class="navbar-logo">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <circle cx="9" cy="9" r="8" fill="#2563eb" opacity=".15"/>
+      <circle cx="9" cy="9" r="4" fill="#2563eb"/>
+      <circle cx="9" cy="9" r="1.5" fill="#fff"/>
+    </svg>
+    Dyna<span>Mo</span>
+  </div>
+  <div class="navbar-cycle" id="last-cycle-label">Last cycle: —</div>
+  <div class="navbar-spacer"></div>
+  <div class="navbar-actions">
+    <button class="bell-btn" id="bell-btn" onclick="openNotifDrawer()" title="Notifications">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+      <span class="bell-badge" id="bell-badge"></span>
+    </button>
+    <button class="btn btn-ghost" id="changes-btn" onclick="openDrawer()">
+      ⚡ Recent Changes <span class="btn-badge" id="changes-badge" style="display:none"></span>
+    </button>
+    <button class="btn btn-primary" id="run-cycle-btn" onclick="runCycle()">
+      <span class="btn-icon">⟳</span>
+      <div class="spinner"></div>
+      Refresh
+    </button>
+  </div>
+</nav>
+
+<!-- FILTER BAR -->
+<div class="filter-bar" id="filter-bar">
+  <span class="filter-bar-label">Filters</span>
+
+  <!-- City dropdown -->
+  <div class="dd-wrap" id="dd-city">
+    <div class="dd-btn" id="dd-city-btn" onclick="toggleDd('city')">
+      <span class="city-dot dot-bangalore"></span>
+      City <span class="dd-tag" id="city-tag" style="display:none"></span>
+      <span class="dd-caret">▼</span>
+    </div>
+    <div class="dd-panel" id="dd-city-panel">
+      <div class="dd-panel-title">City</div>
+      <div class="dd-option">
+        <input type="checkbox" id="city-all" checked onchange="onCityAll(this)">
+        <span style="font-weight:600">All Cities</span>
+      </div>
+      <div class="dd-option">
+        <input type="checkbox" class="city-filter" value="Bangalore" checked onchange="applyFilters()">
+        <span class="city-dot dot-bangalore"></span> Bangalore
+        <span class="dd-option-count" id="count-Bangalore">3</span>
+      </div>
+      <div class="dd-option">
+        <input type="checkbox" class="city-filter" value="Chennai" checked onchange="applyFilters()">
+        <span class="city-dot dot-chennai"></span> Chennai
+        <span class="dd-option-count" id="count-Chennai">3</span>
+      </div>
+      <div class="dd-option">
+        <input type="checkbox" class="city-filter" value="Delhi" checked onchange="applyFilters()">
+        <span class="city-dot dot-delhi"></span> Delhi
+        <span class="dd-option-count" id="count-Delhi">3</span>
+      </div>
+      <div class="dd-option">
+        <input type="checkbox" class="city-filter" value="Mumbai" checked onchange="applyFilters()">
+        <span class="city-dot dot-mumbai"></span> Mumbai
+        <span class="dd-option-count" id="count-Mumbai">3</span>
+      </div>
+      <div class="dd-option">
+        <input type="checkbox" class="city-filter" value="Hyderabad" checked onchange="applyFilters()">
+        <span class="city-dot dot-hyderabad"></span> Hyderabad
+        <span class="dd-option-count" id="count-Hyderabad">3</span>
+      </div>
+      <div class="dd-option">
+        <input type="checkbox" class="city-filter" value="Kolkata" checked onchange="applyFilters()">
+        <span class="city-dot dot-kolkata"></span> Kolkata
+        <span class="dd-option-count" id="count-Kolkata">3</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- State dropdown -->
+  <div class="dd-wrap" id="dd-state">
+    <div class="dd-btn" id="dd-state-btn" onclick="toggleDd('state')">
+      State <span class="dd-caret">▼</span>
+    </div>
+    <div class="dd-panel" id="dd-state-panel">
+      <div class="dd-panel-title">State</div>
+      <div class="dd-option">
+        <input type="radio" name="state-filter" value="all" checked onchange="applyFilters()"> All
+      </div>
+      <div class="dd-option">
+        <input type="radio" name="state-filter" value="active" onchange="applyFilters()">
+        <span style="color:#16a34a;font-size:11px;">●</span> Active only
+      </div>
+      <div class="dd-option">
+        <input type="radio" name="state-filter" value="paused" onchange="applyFilters()">
+        <span style="color:#9ca3af;font-size:11px;">○</span> Paused only
+      </div>
+    </div>
+  </div>
+
+  <!-- Condition dropdown -->
+  <div class="dd-wrap" id="dd-cond">
+    <div class="dd-btn" id="dd-cond-btn" onclick="toggleDd('cond')">
+      Condition <span class="dd-tag" id="cond-tag" style="display:none"></span>
+      <span class="dd-caret">▼</span>
+    </div>
+    <div class="dd-panel" id="dd-cond-panel">
+      <div class="dd-panel-title">Condition</div>
+      <div class="dd-option">
+        <input type="checkbox" class="cond-filter" value="hot" checked onchange="applyFilters()">
+        <span class="cond-chip chip-hot">HOT</span> Hot
+      </div>
+      <div class="dd-option">
+        <input type="checkbox" class="cond-filter" value="rainy" checked onchange="applyFilters()">
+        <span class="cond-chip chip-rainy">RAIN</span> Rainy
+      </div>
+      <div class="dd-option">
+        <input type="checkbox" class="cond-filter" value="normal" checked onchange="applyFilters()">
+        <span class="cond-chip chip-normal">NORM</span> Normal
+      </div>
+      <div class="dd-option">
+        <input type="checkbox" class="cond-filter" value="unknown" checked onchange="applyFilters()">
+        <span class="cond-chip chip-unknown">?</span> Unknown
+      </div>
+    </div>
+  </div>
+
+  <!-- Override dropdown -->
+  <div class="dd-wrap" id="dd-over">
+    <div class="dd-btn" id="dd-over-btn" onclick="toggleDd('over')">
+      Override <span class="dd-caret">▼</span>
+    </div>
+    <div class="dd-panel" id="dd-over-panel">
+      <div class="dd-panel-title">Override</div>
+      <div class="dd-option">
+        <input type="radio" name="override-filter" value="all" checked onchange="applyFilters()"> All
+      </div>
+      <div class="dd-option">
+        <input type="radio" name="override-filter" value="overridden" onchange="applyFilters()"> Overridden only
+      </div>
+      <div class="dd-option">
+        <input type="radio" name="override-filter" value="auto" onchange="applyFilters()"> Auto only
+      </div>
+    </div>
+  </div>
+
+  <div class="filter-sep"></div>
+
+  <!-- Active filter chips (shown when non-default) -->
+  <div id="active-chips" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;"></div>
+
+  <button class="reset-btn" id="reset-btn" onclick="resetFilters()" style="display:none">✕ Reset</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- KPI CARDS -->
+  <div class="kpi-row">
+    <div class="kpi-card kpi-total">
+      <div class="kpi-card-label">Total Line Items</div>
+      <div class="kpi-card-value" id="kpi-total">—</div>
+      <div class="kpi-card-sub" id="kpi-total-sub">across 4 cities</div>
+    </div>
+    <div class="kpi-card kpi-active">
+      <div class="kpi-card-label">Active</div>
+      <div class="kpi-card-value" id="kpi-active">—</div>
+      <div class="kpi-card-sub">serving ads now</div>
+    </div>
+    <div class="kpi-card kpi-paused">
+      <div class="kpi-card-label">Paused</div>
+      <div class="kpi-card-value" id="kpi-paused">—</div>
+      <div class="kpi-card-sub">not serving</div>
+    </div>
+    <div class="kpi-card kpi-override">
+      <div class="kpi-card-label">Manual Overrides</div>
+      <div class="kpi-card-value" id="kpi-override">—</div>
+      <div class="kpi-card-sub">human in the loop</div>
+    </div>
+  </div>
+
+  <!-- WEATHER STRIP -->
+  <div class="section-header">
+    <span class="section-title">City Weather</span>
+    <span class="section-badge">live</span>
+  </div>
+  <div class="weather-strip" id="weather-strip"></div>
+
+  <!-- LINE ITEMS TABLE -->
+  <div class="section-header">
+    <span class="section-title">Line Items</span>
+    <span class="section-badge" id="visible-count">—</span>
+  </div>
+  <div class="table-section">
+    <table class="data-table" id="line-items-table">
+      <thead>
+        <tr>
+          <th onclick="sortTable('city')">City <span class="sort-icon">↕</span></th>
+          <th onclick="sortTable('creative')">Creative <span class="sort-icon">↕</span></th>
+          <th onclick="sortTable('state')">State <span class="sort-icon">↕</span></th>
+          <th>Condition</th>
+          <th>Reason</th>
+          <th>Override</th>
+        </tr>
+      </thead>
+      <tbody id="line-items-body">
+        <tr><td colspan="6" class="empty-state">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- feed-body kept hidden for drawer use -->
+  <tbody id="feed-body" style="display:none"></tbody>
+
+</div>
+
+<!-- OVERRIDE CONFIRMATION MODAL -->
+<div class="modal-overlay" id="override-modal" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Confirm Override</div>
+    <div class="modal-sub" id="modal-sub"></div>
+    <label class="modal-label" for="modal-reason">Reason (required)</label>
+    <textarea class="modal-input" id="modal-reason" placeholder="e.g. Flash sale in Delhi — keep hot creative running through midnight"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-confirm-btn" onclick="confirmOverride()">Confirm & Apply</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- NOTIFICATIONS DRAWER -->
+<div class="drawer-overlay" id="notif-overlay" onclick="closeNotifDrawer()"></div>
+<div class="drawer" id="notif-drawer">
+  <div class="drawer-header">
+    <div class="drawer-title">
+      🔔 Notifications
+      <span class="drawer-count" id="notif-count">0</span>
+    </div>
+    <button class="drawer-close" onclick="closeNotifDrawer()">✕</button>
+  </div>
+  <div class="drawer-body" id="notif-body">
+    <div class="drawer-empty">No alerts — all systems normal.</div>
+  </div>
+</div>
+
+<!-- RECENT CHANGES DRAWER -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="changes-drawer">
+  <div class="drawer-header">
+    <div class="drawer-title">
+      ⚡ Recent Changes
+      <span class="drawer-count" id="drawer-count">0</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <label style="font-size:12px;color:var(--text-dim);white-space:nowrap;">Show
+        <select id="changes-limit-select" onchange="onChangesLimitChange()" style="
+          margin-left:4px; font-size:12px; padding:3px 6px;
+          border:1px solid var(--border); border-radius:5px;
+          background:#fff; color:var(--text-main); cursor:pointer; outline:none;
+        ">
+          <option value="10">10</option>
+          <option value="20" selected>20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </label>
+      <button class="drawer-close" onclick="closeDrawer()">✕</button>
+    </div>
+  </div>
+  <div class="drawer-body" id="drawer-body">
+    <div class="drawer-empty">No changes yet — run a cycle to see transitions.</div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────
+let allItems = [], allTransitions = [], cityWeatherMap = {};
+let sortKey = 'city', sortAsc = true;
+let autoRefreshInterval = null, isAutoRefreshOn = false;
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
+
+function startAutoRefresh() {
+  if (isAutoRefreshOn) return;
+  isAutoRefreshOn = true;
+  autoRefreshInterval = setInterval(loadData, AUTO_REFRESH_MS);
+  const btn = document.getElementById('auto-refresh-btn');
+  if (btn) btn.classList.add('on');
+}
+
+function toggleAutoRefresh() {
+  const btn = document.getElementById('auto-refresh-btn');
+  if (isAutoRefreshOn) {
+    clearInterval(autoRefreshInterval);
+    isAutoRefreshOn = false;
+    if (btn) btn.classList.remove('on');
+    showToast('Auto-refresh paused');
+  } else {
+    startAutoRefresh();
+    showToast('Auto-refresh on — polls every 5 min');
+  }
+}
+
+// ── INIT ───────────────────────────────────────────────────────
+document.fonts.ready.then(() => { loadData(); startAutoRefresh(); });
+
+// Close dropdowns on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.dd-wrap')) closeAllDd();
+});
+
+// ── DROPDOWN LOGIC ─────────────────────────────────────────────
+const DD_IDS = ['city','state','cond','over'];
+
+function toggleDd(id) {
+  const isOpen = document.getElementById(`dd-${id}-panel`).classList.contains('open');
+  closeAllDd();
+  if (!isOpen) {
+    document.getElementById(`dd-${id}-panel`).classList.add('open');
+    document.getElementById(`dd-${id}-btn`).classList.add('open');
+  }
+}
+function closeAllDd() {
+  DD_IDS.forEach(id => {
+    document.getElementById(`dd-${id}-panel`)?.classList.remove('open');
+    document.getElementById(`dd-${id}-btn`)?.classList.remove('open');
+  });
+}
+
+// ── DATA ───────────────────────────────────────────────────────
+async function loadData() {
+  try {
+    const res = await fetch('/api/state');
+    if (!res.ok) throw new Error(`/api/state returned ${res.status}`);
+    const data = await res.json();
+    allItems = data.line_items || [];
+    allTransitions = data.recent_transitions || [];
+    buildWeatherMap(data.city_weather || []);
+    render();
+  } catch(e) { console.error('loadData failed:', e.message, e.stack); showToast('Failed to load data: ' + e.message); }
+}
+
+function buildWeatherMap(cityWeatherRows) {
+  cityWeatherMap = {};
+  for (const row of cityWeatherRows) {
+    cityWeatherMap[row.city] = {
+      condition:   row.condition || 'unknown',
+      temperature: row.temperature,
+      feels_like:  row.feels_like,
+      precip:      row.precip,
+    };
+  }
+  // Fallback for any city not yet in city_weather table
+  for (const li of allItems) {
+    if (!cityWeatherMap[li.city]) {
+      cityWeatherMap[li.city] = { condition: 'unknown', temperature: null, feels_like: null, precip: null };
+    }
+  }
+}
+
+// ── RENDER ─────────────────────────────────────────────────────
+function render() {
+  updateLastCycle();
+  renderKPIs();
+  renderAlerts();
+  renderWeather();
+  renderTable();
+  renderFeed();
+  applyFilters();
+  updateChangesBadge();
+  if (drawerOpen) renderDrawer();
+}
+
+function updateLastCycle() {
+  const times = allTransitions.map(t => t.timestamp).filter(Boolean).sort().reverse();
+  const el = document.getElementById('last-cycle-label');
+  if (el && times.length) {
+    const d = new Date(times[0]);
+    el.textContent = 'Last cycle: ' + d.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }
+}
+
+function renderKPIs(items) {
+  items = items || allItems;
+  const active   = items.filter(i => i.state === 'active').length;
+  const paused   = items.filter(i => i.state === 'paused').length;
+  const override = items.filter(i => i.override !== 'none').length;
+  const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setText('kpi-total',    items.length);
+  setText('kpi-active',   active);
+  setText('kpi-paused',   paused);
+  setText('kpi-override', override);
+  setText('kpi-total-sub', items.length === allItems.length ? 'across 4 cities' : `of ${allItems.length} total`);
+}
+
+let currentAlerts = [];
+
+function buildAlerts() {
+  const alerts = [];
+  const byCity = {};
+  for (const li of allItems) { (byCity[li.city] = byCity[li.city]||[]).push(li); }
+
+  for (const li of allItems)
+    if ((li.current_reason||'').includes('failsafe')) {
+      alerts.push({ type: 'critical', icon: '🚨', title: `Fail-safe: ${li.city} / ${li.creative_name}`, sub: 'Weather data unavailable — generic creative is running' });
+      break;
+    }
+  for (const [city, items] of Object.entries(byCity))
+    if (items.every(i => i.state === 'paused'))
+      alerts.push({ type: 'warning', icon: '⚠️', title: `All creatives paused in ${city}`, sub: 'No ads are currently serving in this city' });
+  for (const li of allItems)
+    if (li.override !== 'none') {
+      const label = li.override === 'force_active' ? 'FORCE ON' : 'FORCE OFF';
+      alerts.push({ type: 'warning', icon: '✋', title: `Manual override [${label}]: ${li.city}`, sub: li.creative_name + ' — DynaMo cannot auto-switch this line item' });
+    }
+  return alerts;
+}
+
+function renderAlerts() {
+  currentAlerts = buildAlerts();
+
+  // Bell badge
+  const bell = document.getElementById('bell-btn');
+  const badge = document.getElementById('bell-badge');
+  if (currentAlerts.length > 0) {
+    bell.classList.add('has-alerts');
+    badge.textContent = currentAlerts.length > 9 ? '9+' : currentAlerts.length;
+    badge.style.display = 'block';
+  } else {
+    bell.classList.remove('has-alerts');
+    badge.style.display = 'none';
+  }
+
+  // Re-render drawer if open
+  if (notifDrawerOpen) renderNotifDrawer();
+}
+
+function renderNotifDrawer() {
+  const body = document.getElementById('notif-body');
+  const countEl = document.getElementById('notif-count');
+  countEl.textContent = currentAlerts.length;
+
+  if (!currentAlerts.length) {
+    body.innerHTML = `<div class="notif-card ok"><span class="notif-icon">✓</span><div class="notif-body"><div class="notif-title">All systems normal</div><div class="notif-sub">Engine is running on weather signals — no issues detected</div></div></div>`;
+    return;
+  }
+  body.innerHTML = currentAlerts.map(a => `
+    <div class="notif-card ${a.type === 'critical' ? 'critical' : ''}">
+      <span class="notif-icon">${a.icon}</span>
+      <div class="notif-body">
+        <div class="notif-title">${a.title}</div>
+        <div class="notif-sub">${a.sub}</div>
+      </div>
+    </div>`).join('');
+}
+
+function condBadgeClass(c) {
+  return {hot:'badge-hot',rainy:'badge-rainy',normal:'badge-normal'}[c]||'badge-unknown';
+}
+
+function renderWeather() {
+  const cities = [...new Set(allItems.map(i=>i.city))].sort();
+  document.getElementById('weather-strip').innerHTML = cities.map(city => {
+    const w = cityWeatherMap[city]||{condition:'unknown'};
+    const cond = w.condition||'unknown';
+    return `<div class="weather-card" data-city="${city}" onclick="toggleCityFilter('${city}')">
+      <div class="weather-city">${city}</div>
+      <div class="weather-badge ${condBadgeClass(cond)}">${cond.toUpperCase()}</div>
+      <div class="weather-stats">
+        ${w.temperature!=null?`<div class="weather-stat">🌡 ${w.temperature.toFixed(1)}°C actual</div>`:''}
+        ${w.feels_like!=null?`<div class="weather-stat">🤔 ${w.feels_like.toFixed(1)}°C feels like</div>`:''}
+        ${w.precip!=null?`<div class="weather-stat">🌧 ${w.precip.toFixed(1)} mm precip</div>`:''}
+        ${w.temperature==null&&w.feels_like==null?'<div class="weather-stat" style="color:#ef4444">No weather data</div>':''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTable() {
+  const sorted = [...allItems].sort(compareFn(sortKey, sortAsc));
+  document.getElementById('line-items-body').innerHTML = sorted.map(li => {
+    const cond = (cityWeatherMap[li.city]||{}).condition||'unknown';
+    const isOverride = li.override !== 'none';
+    const rowClass = isOverride ? 'row-override' : (li.state==='active' ? 'row-active' : 'row-paused');
+    const overrideBadge = li.override==='force_active'
+      ? '<span class="override-badge badge-manual-on">FORCE ON</span>'
+      : li.override==='force_paused'
+      ? '<span class="override-badge badge-manual-off">FORCE OFF</span>' : '';
+    return `<tr class="${rowClass}" data-city="${li.city}" data-state="${li.state}" data-condition="${cond}" data-override="${li.override}">
+      <td class="td-city"><span class="city-dot dot-${li.city.toLowerCase()}" style="margin-right:4px;"></span>${li.city}</td>
+      <td><div class="td-creative">${li.creative_name} ${overrideBadge}</div></td>
+      <td><span class="td-state-pill ${li.state==='active'?'pill-active':'pill-paused'}">
+        <span class="pill-dot"></span>${li.state==='active'?'ACTIVE':'paused'}</span></td>
+      <td><span class="condition-chip ${condBadgeClass(cond)}">${cond.toUpperCase()}</span></td>
+      <td class="td-reason">${li.current_reason||'—'}</td>
+      <td><select class="override-select" data-id="${li.id}" data-current="${li.override||'none'}" onchange="setOverride(${li.id},this.value,'${(li.creative_name||'').replace(/'/g,"\\'")}','${li.city}')">
+        <option value="none" ${li.override==='none'?'selected':''}>Auto</option>
+        <option value="force_active" ${li.override==='force_active'?'selected':''}>Force ON</option>
+        <option value="force_paused" ${li.override==='force_paused'?'selected':''}>Force OFF</option>
+      </select></td>
+    </tr>`;
+  }).join('');
+  updateSortHeaders();
+}
+
+function renderFeed() {
+  const cityById={}, nameById={};
+  for (const li of allItems) { cityById[li.id]=li.city; nameById[li.id]=li.creative_name; }
+  const tbody = document.getElementById('feed-body');
+  if (!tbody) return; // feed moved to drawer — element may not exist
+  if (!allTransitions.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-state">No transitions yet.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = allTransitions.map(t => {
+    const city = cityById[t.line_item_id]||'?';
+    const name = nameById[t.line_item_id]||`#${t.line_item_id}`;
+    const isUp = t.to_state==='active';
+    const ts = t.timestamp ? new Date(t.timestamp).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
+    return `<tr class="feed-row" data-city="${city}">
+      <td class="feed-ts">${ts}</td>
+      <td class="feed-city"><span class="city-dot dot-${city.toLowerCase()}" style="margin-right:4px;"></span>${city}</td>
+      <td style="font-size:13px;font-weight:500;color:var(--text-main);">${name}</td>
+      <td><span class="change-pill ${isUp?'change-up':'change-down'}">${isUp?'↑ paused → active':'↓ active → paused'}</span></td>
+      <td class="feed-reason">${t.reason||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── SORT ───────────────────────────────────────────────────────
+function compareFn(key, asc) {
+  return (a, b) => {
+    let va = key==='creative' ? a.creative_name : key==='city' ? a.city+a.creative_name : a[key]||'';
+    let vb = key==='creative' ? b.creative_name : key==='city' ? b.city+b.creative_name : b[key]||'';
+    return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+  };
+}
+function sortTable(key) {
+  if (sortKey===key) sortAsc=!sortAsc; else { sortKey=key; sortAsc=true; }
+  renderTable(); applyFilters();
+}
+function updateSortHeaders() {
+  document.querySelectorAll('.data-table thead th').forEach(th => {
+    th.classList.remove('sorted');
+    const icon = th.querySelector('.sort-icon');
+    if (icon) icon.textContent = '↕';
+  });
+  const idx = {city:0,creative:1,state:2}[sortKey];
+  if (idx!==undefined) {
+    const th = document.querySelectorAll('.data-table thead th')[idx];
+    th.classList.add('sorted');
+    const icon = th.querySelector('.sort-icon');
+    if (icon) icon.textContent = sortAsc ? '↑' : '↓';
+  }
+}
+
+// ── FILTERS ────────────────────────────────────────────────────
+function getActiveFilters() {
+  const cities = [...document.querySelectorAll('.city-filter:checked')].map(c=>c.value);
+  const state  = document.querySelector('input[name="state-filter"]:checked')?.value||'all';
+  const conds  = [...document.querySelectorAll('.cond-filter:checked')].map(c=>c.value);
+  const over   = document.querySelector('input[name="override-filter"]:checked')?.value||'all';
+  return { cities, state, conds, over };
+}
+
+function applyFilters() {
+  const { cities, state, conds, over } = getActiveFilters();
+  let visCount = 0;
+
+  document.querySelectorAll('#line-items-body tr').forEach(tr => {
+    const cityOk  = cities.includes(tr.dataset.city);
+    const stateOk = state==='all' || tr.dataset.state===state;
+    const condOk  = conds.includes(tr.dataset.condition);
+    const overOk  = over==='all'
+      || (over==='overridden' && tr.dataset.override!=='none')
+      || (over==='auto'       && tr.dataset.override==='none');
+    const vis = cityOk && stateOk && condOk && overOk;
+    tr.classList.toggle('row-hidden', !vis);
+    if (vis) visCount++;
+  });
+
+  document.querySelectorAll('.feed-row').forEach(tr =>
+    tr.classList.toggle('feed-row-hidden', !cities.includes(tr.dataset.city)));
+
+  document.querySelectorAll('.weather-card').forEach(card =>
+    card.classList.toggle('filter-active', cities.includes(card.dataset.city)));
+
+  // City-All checkbox
+  const allBoxes = document.querySelectorAll('.city-filter');
+  const allChecked = [...allBoxes].every(c=>c.checked);
+  document.getElementById('city-all').checked = allChecked;
+  document.getElementById('city-all').indeterminate = !allChecked && [...allBoxes].some(c=>c.checked);
+
+  const vc = document.getElementById('visible-count');
+  if (vc) vc.textContent = visCount===allItems.length ? `${allItems.length} items` : `${visCount} of ${allItems.length}`;
+
+  // Update dropdown button state (highlight if non-default)
+  updateDdButtonState(cities, state, conds, over);
+
+  // Recompute KPIs
+  const rows = [...document.querySelectorAll('#line-items-body tr')];
+  const visItems = allItems.filter((_,i) => rows[i] && !rows[i].classList.contains('row-hidden'));
+  renderKPIs(visItems.length ? visItems : allItems);
+}
+
+function updateDdButtonState(cities, state, conds, over) {
+  const allCities = [...document.querySelectorAll('.city-filter')].map(c=>c.value);
+  const allConds  = ['hot','rainy','normal','unknown'];
+
+  const cityActive  = cities.length < allCities.length;
+  const stateActive = state !== 'all';
+  const condActive  = conds.length < allConds.length;
+  const overActive  = over !== 'all';
+
+  const setActive = (id, active, count) => {
+    const btn = document.getElementById(`dd-${id}-btn`);
+    const tag = document.getElementById(`${id}-tag`);
+    btn.classList.toggle('active', active);
+    if (tag) { tag.style.display = active ? 'inline-block' : 'none'; if (count) tag.textContent = count; }
+  };
+
+  setActive('city',  cityActive,  cityActive ? cities.length : null);
+  setActive('state', stateActive, null);
+  setActive('cond',  condActive,  condActive ? conds.length : null);
+  setActive('over',  overActive,  null);
+
+  // Active filter chips row
+  const chips = [];
+  if (cityActive)  chips.push({ label: `Cities: ${cities.join(', ')}`, clear: () => { document.querySelectorAll('.city-filter').forEach(c=>c.checked=true); applyFilters(); } });
+  if (stateActive) chips.push({ label: `State: ${state}`, clear: () => { document.querySelector('input[name="state-filter"][value="all"]').checked=true; applyFilters(); } });
+  if (condActive)  chips.push({ label: `Condition: ${conds.join(', ')}`, clear: () => { document.querySelectorAll('.cond-filter').forEach(c=>c.checked=true); applyFilters(); } });
+  if (overActive)  chips.push({ label: `Override: ${over}`, clear: () => { document.querySelector('input[name="override-filter"][value="all"]').checked=true; applyFilters(); } });
+
+  const chipsEl = document.getElementById('active-chips');
+  chipsEl.innerHTML = chips.map((c,i) =>
+    `<span class="active-filter-chip">${c.label}<span class="chip-x" onclick="clearChip(${i})">✕</span></span>`
+  ).join('');
+  window._filterChips = chips;
+
+  const hasAny = cityActive||stateActive||condActive||overActive;
+  document.getElementById('reset-btn').style.display = hasAny ? 'block' : 'none';
+}
+
+function clearChip(i) { window._filterChips[i].clear(); }
+
+function onCityAll(cb) {
+  document.querySelectorAll('.city-filter').forEach(c => c.checked = cb.checked);
+  applyFilters();
+}
+
+function toggleCityFilter(city) {
+  const boxes = document.querySelectorAll('.city-filter');
+  const allChecked = [...boxes].every(b=>b.checked);
+  if (allChecked) {
+    boxes.forEach(b => b.checked = b.value===city);
+  } else {
+    const target = [...boxes].find(b=>b.value===city);
+    if (target) target.checked = !target.checked;
+    if (![...boxes].some(b=>b.checked)) boxes.forEach(b=>b.checked=true);
+  }
+  applyFilters();
+}
+
+function resetFilters() {
+  document.querySelectorAll('.city-filter').forEach(c=>c.checked=true);
+  document.getElementById('city-all').checked=true;
+  document.querySelector('input[name="state-filter"][value="all"]').checked=true;
+  document.querySelectorAll('.cond-filter').forEach(c=>c.checked=true);
+  document.querySelector('input[name="override-filter"][value="all"]').checked=true;
+  applyFilters();
+}
+
+// ── OVERRIDE MODAL ─────────────────────────────────────────────
+let _pendingOverride = null;
+
+function setOverride(id, value, creativeName, city) {
+  // Reset the select back to current value — don't change until confirmed
+  const sel = document.querySelector(`select[data-id="${id}"]`);
+  if (sel) sel.value = sel.dataset.current;
+
+  _pendingOverride = { id, value };
+
+  const labels = { force_active: 'FORCE ON', force_paused: 'FORCE OFF', none: 'Auto (clear override)' };
+  const badgeClass = { force_active: 'on', force_paused: 'off', none: 'auto' };
+  document.getElementById('modal-title').innerHTML =
+    `${city} — ${creativeName} <span class="modal-badge ${badgeClass[value]}">${labels[value]}</span>`;
+  document.getElementById('modal-sub').textContent =
+    'This override will take effect immediately. The engine will run a cycle right after.';
+  document.getElementById('modal-reason').value = '';
+  document.getElementById('override-modal').classList.add('open');
+  setTimeout(() => document.getElementById('modal-reason').focus(), 80);
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('override-modal')) return;
+  document.getElementById('override-modal').classList.remove('open');
+  _pendingOverride = null;
+}
+
+async function confirmOverride() {
+  const reason = document.getElementById('modal-reason').value.trim();
+  if (!reason) {
+    document.getElementById('modal-reason').focus();
+    document.getElementById('modal-reason').style.borderColor = '#dc2626';
+    setTimeout(() => document.getElementById('modal-reason').style.borderColor = '', 1200);
+    return;
+  }
+  const { id, value } = _pendingOverride;
+  document.getElementById('override-modal').classList.remove('open');
+  _pendingOverride = null;
+
+  const btn = document.getElementById('run-cycle-btn');
+  btn.classList.add('loading'); btn.disabled = true;
+  try {
+    const res = await fetch(`/override/${id}?override=${value}&reason=${encodeURIComponent(reason)}`, { method: 'POST' });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    await loadData();
+    showToast('Override applied — cycle ran, dashboard updated');
+  } catch(e) { showToast(`Failed: ${e.message}`); }
+  finally { btn.classList.remove('loading'); btn.disabled = false; }
+}
+
+// ── RUN CYCLE ──────────────────────────────────────────────────
+async function runCycle() {
+  const btn = document.getElementById('run-cycle-btn');
+  btn.classList.add('loading'); btn.disabled=true;
+  try {
+    const res = await fetch('/run-cycle', { method: 'POST' });
+    if (!res.ok) throw new Error(`Server returned ${res.status}`);
+    await loadData();
+    showToast('Cycle complete — decisions updated');
+  } catch(e) { showToast(`Cycle failed — ${e.message}`); }
+  finally { btn.classList.remove('loading'); btn.disabled=false; }
+}
+
+
+// ── NOTIFICATIONS DRAWER ───────────────────────────────────────
+let notifDrawerOpen = false;
+
+function openNotifDrawer() {
+  document.getElementById('notif-drawer').classList.add('open');
+  document.getElementById('notif-overlay').classList.add('open');
+  notifDrawerOpen = true;
+  renderNotifDrawer();
+  // clear badge glow while open
+  document.getElementById('bell-btn').classList.remove('has-alerts');
+  document.getElementById('bell-badge').style.display = 'none';
+}
+
+function closeNotifDrawer() {
+  document.getElementById('notif-drawer').classList.remove('open');
+  document.getElementById('notif-overlay').classList.remove('open');
+  notifDrawerOpen = false;
+  // restore badge if alerts still exist
+  if (currentAlerts.length > 0) {
+    document.getElementById('bell-btn').classList.add('has-alerts');
+    document.getElementById('bell-badge').style.display = 'block';
+  }
+}
+
+// ── RECENT CHANGES DRAWER ──────────────────────────────────────
+let drawerOpen = false;
+let changesLimit = 20;
+
+function openDrawer() {
+  document.getElementById('changes-drawer').classList.add('open');
+  document.getElementById('drawer-overlay').classList.add('open');
+  drawerOpen = true;
+  renderDrawer();
+  // clear badge when opened
+  const badge = document.getElementById('changes-badge');
+  badge.style.display = 'none';
+}
+
+function closeDrawer() {
+  document.getElementById('changes-drawer').classList.remove('open');
+  document.getElementById('drawer-overlay').classList.remove('open');
+  drawerOpen = false;
+}
+
+function onChangesLimitChange() {
+  changesLimit = parseInt(document.getElementById('changes-limit-select').value, 10);
+  renderDrawer();
+}
+
+function renderDrawer() {
+  const cityById = {}, nameById = {};
+  for (const li of allItems) { cityById[li.id] = li.city; nameById[li.id] = li.creative_name; }
+
+  const body = document.getElementById('drawer-body');
+  const count = document.getElementById('drawer-count');
+  const visible = allTransitions.slice(0, changesLimit);
+  count.textContent = `${visible.length} of ${allTransitions.length}`;
+
+  if (!allTransitions.length) {
+    body.innerHTML = '<div class="drawer-empty">No transitions yet — run a cycle to see changes.</div>';
+    return;
+  }
+
+  body.innerHTML = visible.map(t => {
+    const city = cityById[t.line_item_id] || '?';
+    const name = nameById[t.line_item_id] || `#${t.line_item_id}`;
+    const isUp = t.to_state === 'active';
+    const ts = t.timestamp
+      ? new Date(t.timestamp).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit', second:'2-digit' })
+      : '—';
+    const dotClass = `dot-${city.toLowerCase()}`;
+    return `<div class="change-card">
+      <div class="change-card-top">
+        <span class="city-dot ${dotClass}"></span>
+        <span style="font-size:13px;font-weight:600;color:var(--text-main)">${city}</span>
+        <span style="font-size:12px;color:var(--text-dim)">/ ${name}</span>
+        <span class="change-pill ${isUp ? 'change-up' : 'change-down'}" style="margin-left:auto">
+          ${isUp ? '↑ activated' : '↓ paused'}
+        </span>
+      </div>
+      <div class="change-card-reason">${t.reason || '—'}</div>
+      <div class="change-card-meta">${ts}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateChangesBadge() {
+  if (drawerOpen) return;
+  const badge = document.getElementById('changes-badge');
+  const total = allTransitions.length;
+  if (total > 0) {
+    badge.textContent = total > 99 ? '99+' : total;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// ── FEED TOGGLE ────────────────────────────────────────────────
+function toggleFeed() {
+  const section = document.getElementById('feed-section');
+  const btn = document.getElementById('feed-toggle-btn');
+  const hidden = section.style.display === 'none';
+  section.style.display = hidden ? '' : 'none';
+  btn.textContent = hidden ? 'Hide' : 'Show';
+}
+
+// ── TOAST ──────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
